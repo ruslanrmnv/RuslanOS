@@ -52,12 +52,31 @@ export function createBot(): Bot<MyContext> {
 
   bot.use(session<SessionData, MyContext>({ initial: () => ({}) }));
   bot.use(conversations());
+
+  // Global escape hatches. These MUST be registered BEFORE the conversation
+  // middlewares below, otherwise an active conversation swallows /start and
+  // /cancel as an answer and the user stays stuck mid-flow. ctx.conversation
+  // is already available here (installed by conversations() above).
+  bot.command("start", async (ctx) => {
+    await ctx.conversation.exit();
+    await ctx.reply(START_TEXT, {
+      parse_mode: "Markdown",
+      reply_markup: { remove_keyboard: true },
+    });
+  });
+  bot.command("cancel", async (ctx) => {
+    await ctx.conversation.exit();
+    await ctx.reply("Отменено. Текущий сценарий остановлен.", {
+      reply_markup: { remove_keyboard: true },
+    });
+    await ctx.reply(HELP_TEXT, { parse_mode: "Markdown" });
+  });
+
   bot.use(createConversation(morningConversation, "morningConversation"));
   bot.use(createConversation(eveningConversation, "eveningConversation"));
   bot.use(createConversation(leadConversation, "leadConversation"));
   bot.use(createConversation(priceConversation, "priceConversation"));
 
-  bot.command("start", (ctx) => ctx.reply(START_TEXT, { parse_mode: "Markdown" }));
   bot.command("help", (ctx) => ctx.reply(HELP_TEXT, { parse_mode: "Markdown" }));
 
   bot.command("morning", (ctx) => ctx.conversation.enter("morningConversation"));
@@ -89,11 +108,6 @@ export function createBot(): Bot<MyContext> {
       );
     }
     return ctx.reply(parts.join("\n\n"), { parse_mode: "Markdown" });
-  });
-
-  bot.command("cancel", async (ctx) => {
-    await ctx.conversation.exit();
-    await ctx.reply("Отменено. Возвращаемся в меню — попробуй /morning или /today.");
   });
 
   bot.catch((err) => {
